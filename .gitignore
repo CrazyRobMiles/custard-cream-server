@@ -70,6 +70,13 @@ web_modules/
 .env.*
 !.env.example
 
+# uploaded picture files
+public/pictures/*
+!public/pictures/.gitkeep
+
+# local Claude Code tool config (permissions, local paths) - not project source
+.claude/
+
 # parcel-bundler cache (https://parceljs.org/)
 .cache
 .parcel-cache

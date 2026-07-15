@@ -1,0 +1,29 @@
+{
+  "name": "custard-cream-server",
+  "version": "1.0.0",
+  "description": "An image server for the custard cream camera",
+  "main": "server.js",
+  "scripts": {
+    "devstart": "nodemon server.js",
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20 <21",
+    "npm": ">=9"
+  },
+  "author": "Rob Miles",
+  "license": "ISC",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cookie-parser": "^1.4.5",
+    "ejs": "^3.1.5",
+    "express": "^4.17.1",
+    "jsonwebtoken": "^9.0.0",
+    "mongoose": "^6.0.11",
+    "multer": "^1.4.5-lts.1",
+    "nodemon": "^3.1.10"
+  },
+  "devDependencies": {
+    "dotenv": "^8.2.0"
+  }
+}

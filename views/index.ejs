@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-giJF6kkoqNQ00vy+HMDP7azOuL0xtbfIcaT9wjKHr8RbDVddVHyTfAAsrekwKmP1" crossorigin="anonymous">
+    <title>Custard Cream Server</title>
+</head>
+
+<body>
+    <div class="container mb-4">
+        <img src="/assets/images/large-logo.png" alt="Custard Cream Server" class="img-fluid mb-4">
+
+        <h1 class="mb-4">Custard Cream Server</h1>
+        <p>An image server for the custard cream camera.</p>
+
+        <form action="/pictures/find" method="GET" class="mb-4">
+            <label for="phrase">Find a picture by its three words:</label>
+            <input type="text" id="phrase" name="phrase" placeholder="oak-larch-feather" required class="form-control">
+            <button type="submit" class="btn btn-primary mt-2">Find picture</button>
+        </form>
+
+        <p><a href="/random">See a random picture</a></p>
+
+        <p class="mt-4"><a href="https://www.robmiles.com" target="_blank" rel="noopener">www.robmiles.com</a></p>
+    </div>
+</body>
+
+</html>

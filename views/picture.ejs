@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-giJF6kkoqNQ00vy+HMDP7azOuL0xtbfIcaT9wjKHr8RbDVddVHyTfAAsrekwKmP1" crossorigin="anonymous">
+    <title>Custard Cream Server - <%= picture.phrase %></title>
+</head>
+
+<body>
+    <div class="container mb-4">
+        <a href="/" class="btn btn-outline-secondary mb-4">Home</a>
+
+        <h1 class="mb-4">Picture: <%= picture.phrase %></h1>
+
+        <img src="/pictures/<%= picture.filename %>" alt="<%= picture.phrase %>" class="img-fluid mb-4">
+
+        <p class="mt-4"><a href="/random">See a random picture</a></p>
+
+        <div class="d-flex justify-content-end mt-4">
+            <img src="/assets/images/small-logo.png" alt="Custard Cream Server" style="max-width: 160px; height: auto;">
+        </div>
+    </div>
+</body>
+
+</html>
