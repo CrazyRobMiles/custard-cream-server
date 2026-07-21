@@ -9,6 +9,7 @@ const authenticateToken = require('../behaviours/authenticateToken');
 const requireRole = require('../behaviours/requireRole');
 const generateUniqueThreeWordPhrase = require('../behaviours/threeWordPhrase');
 const TagCache = require('../behaviours/tagCache');
+const EXTENSION_BY_MIME_TYPE = require('../behaviours/imageMimeTypes');
 const Picture = require('../schemas/picture');
 
 const PICTURES_DIR = path.join(__dirname, '..', 'public', 'pictures');
@@ -21,11 +22,6 @@ function normalizePhrase(input) {
         .toLowerCase()
         .replace(/\s+/g, '-');
 }
-
-const EXTENSION_BY_MIME_TYPE = {
-    'image/jpeg': '.jpg',
-    'image/png': '.png'
-};
 
 const upload = multer({
     storage: multer.memoryStorage(),

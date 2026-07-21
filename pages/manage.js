@@ -1,12 +1,29 @@
 const express = require('express');
 const router = express.Router();
+const path = require('path');
+const fs = require('fs/promises');
+const crypto = require('crypto');
 
 const authenticateToken = require('../behaviours/authenticateToken');
 const requireRole = require('../behaviours/requireRole');
 const TagCache = require('../behaviours/tagCache');
+const NanoBanana = require('../behaviours/nanoBanana');
+const generateUniqueThreeWordPhrase = require('../behaviours/threeWordPhrase');
+const EXTENSION_BY_MIME_TYPE = require('../behaviours/imageMimeTypes');
 const Picture = require('../schemas/picture');
 
 const PAGE_SIZE = 9;
+const PICTURES_DIR = path.join(__dirname, '..', 'public', 'pictures');
+
+function pictureDetail(picture) {
+    return {
+        phrase: picture.phrase,
+        filename: picture.filename,
+        tags: picture.tags,
+        aiInstruction: picture.aiInstruction,
+        originalPhrase: picture.originalPhrase
+    };
+}
 
 // Every route here is for the site owner only - no route under /manage is
 // ever reachable without a valid session for a "camera" role account.
@@ -64,13 +81,7 @@ router.get('/api/pictures/:phrase', async (req, res) => {
         return;
     }
 
-    res.json({
-        phrase: picture.phrase,
-        filename: picture.filename,
-        tags: picture.tags,
-        aiInstruction: picture.aiInstruction,
-        originalPhrase: picture.originalPhrase
-    });
+    res.json(pictureDetail(picture));
 });
 
 router.patch('/api/pictures/:phrase', async (req, res) => {
@@ -91,13 +102,71 @@ router.patch('/api/pictures/:phrase', async (req, res) => {
     await picture.save();
     TagCache.registerTags(picture.tags);
 
-    res.json({
-        phrase: picture.phrase,
-        filename: picture.filename,
-        tags: picture.tags,
-        aiInstruction: picture.aiInstruction,
-        originalPhrase: picture.originalPhrase
+    res.json(pictureDetail(picture));
+});
+
+// Sends the picture to Nano Banana (Gemini) for an AI edit and saves the
+// result as a new derived Picture - never overwrites the original, same as
+// how the camera itself records an AI-edited picture (aiInstruction and
+// originalPhrase link the derivative back to what it came from).
+router.post('/api/pictures/:phrase/ai-edit', async (req, res) => {
+    const prompt = String(req.body.prompt || '').trim();
+
+    if (!prompt) {
+        res.status(400).json({ error: 'A prompt is required' });
+        return;
+    }
+
+    const original = await Picture.findOne({ phrase: req.params.phrase });
+
+    if (original === null) {
+        res.status(404).json({ error: 'Picture not found' });
+        return;
+    }
+
+    let imageBuffer;
+    try {
+        imageBuffer = await fs.readFile(path.join(PICTURES_DIR, original.filename));
+    } catch (err) {
+        res.status(409).json({ error: 'Image file is not available on this server, so it cannot be AI edited here' });
+        return;
+    }
+
+    let result;
+    try {
+        result = await NanoBanana.editImage(imageBuffer, prompt, original.mimeType);
+    } catch (err) {
+        console.log('AI edit request failed:', err.message);
+        res.status(502).json({ error: `AI edit request failed: ${err.message}` });
+        return;
+    }
+
+    if (!result.data) {
+        res.status(422).json({
+            error: result.text ? `AI edit did not return an image: ${result.text}` : 'AI edit did not return an image'
+        });
+        return;
+    }
+
+    const extension = EXTENSION_BY_MIME_TYPE[result.mimeType] || '.png';
+    const filename = `${crypto.randomUUID()}${extension}`;
+    await fs.writeFile(path.join(PICTURES_DIR, filename), result.data);
+
+    const picture = new Picture({
+        phrase: await generateUniqueThreeWordPhrase(),
+        filename,
+        originalName: original.originalName,
+        mimeType: result.mimeType,
+        uploadedBy: res.user._id,
+        tags: original.tags,
+        aiInstruction: prompt,
+        originalPhrase: original.phrase
     });
+
+    await picture.save();
+    TagCache.registerTags(picture.tags);
+
+    res.status(201).json(pictureDetail(picture));
 });
 
 // Removes only the Picture document - the image file under public/pictures/

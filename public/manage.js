@@ -19,6 +19,9 @@
     const closeViewerBtn = document.getElementById('closeViewerBtn');
     const saveBtn = document.getElementById('saveBtn');
     const deleteBtn = document.getElementById('deleteBtn');
+    const aiEditPrompt = document.getElementById('aiEditPrompt');
+    const aiEditBtn = document.getElementById('aiEditBtn');
+    const aiEditStatus = document.getElementById('aiEditStatus');
 
     let currentPage = 1;
     let currentTag = '';
@@ -104,6 +107,8 @@
         viewerAiInstruction.value = picture.aiInstruction;
         viewerOriginalPhrase.value = picture.originalPhrase;
         viewerStatus.textContent = '';
+        aiEditPrompt.value = '';
+        aiEditStatus.textContent = '';
         updateOriginalLink();
 
         viewerOverlay.classList.remove('d-none');
@@ -170,6 +175,43 @@
         loadPage(currentPage);
     }
 
+    async function aiEditCurrentPicture() {
+        if (!currentPhrase) return;
+
+        const prompt = aiEditPrompt.value.trim();
+        if (!prompt) {
+            aiEditStatus.textContent = 'Enter a prompt first.';
+            return;
+        }
+
+        aiEditBtn.disabled = true;
+        // Nano Banana can take several seconds to return an edited image.
+        aiEditStatus.textContent = 'Sending to AI Edit - this can take a little while...';
+
+        try {
+            const response = await fetchJson(`/manage/api/pictures/${encodeURIComponent(currentPhrase)}/ai-edit`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt })
+            });
+            if (!response) return;
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                aiEditStatus.textContent = data.error || 'AI edit failed.';
+                return;
+            }
+
+            loadTags();
+            loadPage(1);
+            await openViewer(data.phrase);
+            viewerStatus.textContent = 'AI edit created a new picture, shown here.';
+        } finally {
+            aiEditBtn.disabled = false;
+        }
+    }
+
     function escapeHtml(value) {
         return String(value)
             .replace(/&/g, '&amp;')
@@ -195,6 +237,7 @@
     closeViewerBtn.addEventListener('click', closeViewer);
     saveBtn.addEventListener('click', saveCurrentPicture);
     deleteBtn.addEventListener('click', deleteCurrentPicture);
+    aiEditBtn.addEventListener('click', aiEditCurrentPicture);
     viewerOriginalPhrase.addEventListener('input', updateOriginalLink);
 
     // Left/right paging only applies to the gallery, not while the viewer is

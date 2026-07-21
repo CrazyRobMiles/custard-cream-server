@@ -23,6 +23,7 @@ Copy `.env.example` to `.env` and fill in real values. `.env` is gitignored and 
 | `HOST_ADDRESS` | The public base URL of this server (with a trailing slash), used to build absolute picture URLs returned to the camera, e.g. `http://localhost:3100/`. |
 | `PICTURES_COLLECTION` | Optional. Leave unset for normal/production use. Set it to point the whole app (and every script in `scripts/`) at a different MongoDB collection instead of the real `pictures` one - see "Testing locally" below. |
 | `CAMERA_ACCOUNT_EMAIL` / `CAMERA_ACCOUNT_PASSWORD` | Credentials for the dedicated camera account, auto-created on first startup (see below) if no user with this email already exists. |
+| `GOOGLE_API_KEY` | Gemini API key for the **AI Edit** button on `/manage` (see below). Get one from https://aistudio.google.com/apikey — this can be the same key custard-cream-camera uses as `GOOGLE_API_KEY` in its own `secrets.sh`. Only needed if you want to use AI Edit. |
 
 ## The camera account
 
@@ -107,6 +108,7 @@ A login-protected page for browsing, editing, and deleting pictures — there's 
 - Requires a logged-in session (cookie) for a `User` with role `"camera"` — `admin` is *not* included here, unlike the upload endpoint. Visiting `/manage` while logged out redirects to `/login?next=/manage`, and a successful login sends you back to `/manage` instead of the homepage.
 - Shows a 3×3 paginated grid of pictures (newest first), with a tag filter dropdown. Page forward/back with the on-page buttons or the ← / → arrow keys.
 - Clicking a thumbnail opens it full-screen with its three-word phrase (read-only) and editable `tags`, `aiInstruction`, and `originalPhrase` fields. **Save** writes the edited fields back to the `Picture` document; **Delete** removes the `Picture` document only — the image file under `public/pictures/` is left in place (same as the maintenance scripts above).
+- **AI Edit**: enter a prompt and click **AI Edit** to send the picture to Gemini's `gemini-2.5-flash-image` model ("Nano Banana" — the same model and API key custard-cream-camera uses, see `NanoBananaClient.py` there and `behaviours/nanoBanana.js` here) for an AI-edited version. This never overwrites the original — it saves the result as a **new** `Picture` document (new file, new three-word phrase) with `aiInstruction` set to the prompt and `originalPhrase` set back to the source picture, exactly like the camera's own AI-edited uploads. The viewer switches to show the new picture once it's ready. Requires `GOOGLE_API_KEY` in `.env`, and requires the source image file to actually be present in `public/pictures/` on this server (won't work against a picture whose file lives only on the production server — see "Testing locally" above).
 - Backed by a small JSON API under `/manage/api/...` (`pages/manage.js`), used by `public/manage.js` on the page itself — not intended for external/device clients.
 
 There's deliberately no login link on the homepage — the only way in is knowing to go to `/manage`.
