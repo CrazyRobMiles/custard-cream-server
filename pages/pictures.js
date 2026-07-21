@@ -8,6 +8,7 @@ const multer = require('multer');
 const authenticateToken = require('../behaviours/authenticateToken');
 const requireRole = require('../behaviours/requireRole');
 const generateUniqueThreeWordPhrase = require('../behaviours/threeWordPhrase');
+const TagCache = require('../behaviours/tagCache');
 const Picture = require('../schemas/picture');
 
 const PICTURES_DIR = path.join(__dirname, '..', 'public', 'pictures');
@@ -63,10 +64,15 @@ router.post('/', authenticateToken, requireRole('camera', 'admin'), upload.singl
             filename,
             originalName: req.file.originalname,
             mimeType: req.file.mimetype,
-            uploadedBy: res.user._id
+            uploadedBy: res.user._id,
+            // Optional fields from the camera - all default to '' if omitted.
+            tags: String(req.body.tags || '').trim(),
+            aiInstruction: String(req.body.aiInstruction || '').trim(),
+            originalPhrase: String(req.body.originalPhrase || '').trim()
         });
 
         await picture.save();
+        TagCache.registerTags(picture.tags);
 
         const url = new URL(`pictures/${phrase}`, process.env.HOST_ADDRESS).toString();
 

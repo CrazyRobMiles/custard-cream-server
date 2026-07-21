@@ -6,8 +6,17 @@ const User = require('../schemas/user');
 
 const jwtExpirySeconds = 6000;
 
+// Only redirect back to a same-site path after login - a bare "/..." value,
+// never one starting "//" or "/\" (both of which browsers can treat as
+// protocol-relative, i.e. an open redirect to another host).
+function safeNextPath(value) {
+    if (typeof value !== 'string') return null;
+    if (!value.startsWith('/') || value.startsWith('//') || value.startsWith('/\\')) return null;
+    return value;
+}
+
 router.get('/', (req, res) => {
-    res.render('login.ejs');
+    res.render('login.ejs', { next: safeNextPath(req.query.next) || '' });
 });
 
 router.post('/', async (req, res) => {
@@ -45,7 +54,7 @@ router.post('/', async (req, res) => {
         }
 
         res.cookie('token', accessToken, { maxAge: jwtExpirySeconds * 1000 });
-        res.redirect('../');
+        res.redirect(safeNextPath(req.body.next) || '../');
     }
     catch (err) {
         console.log(err.message);
@@ -59,7 +68,8 @@ function respondInvalid(req, res) {
         return;
     }
     res.cookie('token', 'logged out');
-    res.redirect('/login');
+    const next = safeNextPath(req.body.next);
+    res.redirect(next ? `/login?next=${encodeURIComponent(next)}` : '/login');
 }
 
 module.exports = router;

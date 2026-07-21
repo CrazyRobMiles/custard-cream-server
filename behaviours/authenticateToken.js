@@ -23,7 +23,8 @@ function extractToken(req) {
 // behaviour that box-server uses.
 function reject(req, res, viaCookie) {
     if (viaCookie || req.accepts(['html', 'json']) === 'html') {
-        res.redirect('/login');
+        const next = encodeURIComponent(req.originalUrl);
+        res.redirect(`/login?next=${next}`);
         return;
     }
     res.status(401).json({ error: 'Not authenticated' });

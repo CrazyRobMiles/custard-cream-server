@@ -22,6 +22,7 @@ const Manager = require('./manager');
 
 const login = require('./pages/login');
 const logout = require('./pages/logout');
+const manage = require('./pages/manage');
 const pictures = require('./pages/pictures');
 const random = require('./pages/random');
 
@@ -40,8 +41,25 @@ mgr.startServices().then(() => {
     app.use('/public', express.static('public'));
     app.use('/assets', express.static(path.join(__dirname, 'assets')));
     app.use('/pictures', express.static(path.join(__dirname, 'public', 'pictures')));
+
+    // The Picture collection can reference files that aren't present on this
+    // machine's disk (e.g. a dev machine synced with the shared database but
+    // not the full public/pictures/ folder) - express.static above calls
+    // next() rather than 404ing when a file's missing, so anything that looks
+    // like an image request that reaches here falls back to a placeholder
+    // instead of a broken image. Phrase lookups (no file extension) are left
+    // alone to fall through to the pictures router below.
+    app.use('/pictures', (req, res, next) => {
+        if (/\.(jpe?g|png)$/i.test(req.path)) {
+            res.sendFile(path.join(__dirname, 'assets', 'images', 'placeholder.svg'));
+            return;
+        }
+        next();
+    });
+
     app.use('/login', login);
     app.use('/logout', logout);
+    app.use('/manage', manage);
     app.use('/pictures', pictures);
     app.use('/random', random);
 

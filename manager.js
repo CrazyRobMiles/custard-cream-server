@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
 const User = require('./schemas/user');
+const TagCache = require('./behaviours/tagCache');
 
 const port = process.env.PORT || 3000;
 
@@ -45,6 +46,7 @@ class Manager {
         console.log('Database connected');
 
         await this.checkForCameraUser();
+        await TagCache.init();
     }
 
     static activeManager = null;
