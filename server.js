@@ -25,6 +25,7 @@ const logout = require('./pages/logout');
 const manage = require('./pages/manage');
 const pictures = require('./pages/pictures');
 const random = require('./pages/random');
+const slideshow = require('./pages/slideshow');
 
 console.log('Starting up...');
 
@@ -62,6 +63,7 @@ mgr.startServices().then(() => {
     app.use('/manage', manage);
     app.use('/pictures', pictures);
     app.use('/random', random);
+    app.use('/slideshow', slideshow);
 
     // multer (fileFilter/limits) errors, and anything else thrown synchronously
     // in a route, land here rather than Express's default HTML error page -

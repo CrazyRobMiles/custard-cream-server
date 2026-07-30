@@ -10,9 +10,12 @@ const requireRole = require('../behaviours/requireRole');
 const generateUniqueThreeWordPhrase = require('../behaviours/threeWordPhrase');
 const TagCache = require('../behaviours/tagCache');
 const EXTENSION_BY_MIME_TYPE = require('../behaviours/imageMimeTypes');
+const { renderThumbnail } = require('../behaviours/thumbnail');
 const Picture = require('../schemas/picture');
 
 const PICTURES_DIR = path.join(__dirname, '..', 'public', 'pictures');
+const SLIDESHOW_THUMB_MAX_DIMENSION = 480;
+const SLIDESHOW_THUMB_JPEG_QUALITY = 78;
 
 // Someone typing "Oak Larch Feather" (spaces, mixed case) should still find
 // oak-larch-feather - normalize before ever looking it up.
@@ -101,6 +104,35 @@ router.get('/:phrase', async (req, res) => {
     }
 
     res.render('picture.ejs', { picture });
+});
+
+// Two path segments, so this can't collide with GET /:phrase regardless of
+// registration order. Used by the slideshow display, which needs images
+// sized for screen rather than full-resolution originals.
+router.get('/:phrase/thumb', async (req, res) => {
+    const picture = await Picture.findOne({ phrase: req.params.phrase });
+
+    if (picture === null) {
+        res.status(404).json({ error: 'Picture not found' });
+        return;
+    }
+
+    try {
+        const thumbnail = await renderThumbnail(picture.filename, {
+            maxDimension: SLIDESHOW_THUMB_MAX_DIMENSION,
+            quality: SLIDESHOW_THUMB_JPEG_QUALITY
+        });
+
+        // A picture at a fixed phrase never changes its image bytes in place
+        // (edits create a new phrase), so unlike /random/thumb this is safe
+        // to cache long-term.
+        res.set('Cache-Control', 'public, max-age=86400, immutable');
+        res.type('image/jpeg').send(thumbnail);
+    }
+    catch (err) {
+        console.log('Thumbnail generation failed:', err.message);
+        res.status(500).json({ error: 'Could not generate thumbnail' });
+    }
 });
 
 module.exports = router;
