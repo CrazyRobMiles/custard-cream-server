@@ -1,123 +1,96 @@
 import * as THREE from 'three';
 
 const BASE_SIZE = 8.0; // world units, longest edge
-const GEOMETRY_SEGMENTS = 16;
 const FALL_DURATION = 1.0;
 const SETTLE_DURATION = 0.5;
 const SPAWN_HEIGHT_ABOVE_LANDING = 8;
 const TUMBLE_AMPLITUDE = Math.PI * 0.6;
 const TUMBLE_FREQ = 10;
-// Exported so SlideshowScene's overlap check can allow for how far a photo's
-// skid can actually carry it from its nominal landing spot.
-export const SKID_OFFSET = 0.6;
+const SKID_OFFSET = 0.6;
 
 const STATE = { FALLING: 'falling', SETTLING: 'settling', RESTING: 'resting' };
 
-let nextMaterialId = 0;
+// The camera's field of view is fixed vertically, so a narrow (portrait)
+// viewport shows much less of the table horizontally than a wide one - a
+// fixed BASE_SIZE that looks right on a landscape desktop window ends up
+// crowding a portrait phone screen. Scaling down for narrower viewports
+// keeps photos occupying a comparable fraction of the visible width
+// regardless of orientation. REFERENCE_ASPECT is "desktop landscape", the
+// aspect BASE_SIZE was tuned against; MIN_SIZE_SCALE stops very narrow
+// phones shrinking photos down to illegibility.
+const REFERENCE_ASPECT = 16 / 9;
+const MIN_SIZE_SCALE = 0.55;
 
-// Shared with SlideshowScene's overlap check, so both agree exactly on how
-// big a photo of a given aspect ratio actually is.
+function getSizeScale() {
+    const viewportAspect = window.innerWidth / window.innerHeight;
+    return Math.min(1, Math.max(MIN_SIZE_SCALE, viewportAspect / REFERENCE_ASPECT));
+}
+
+// Reads the current viewport each call (rather than caching) so it stays
+// correct across resizes/orientation changes - each newly dropped photo
+// picks up whatever scale is current at that moment; photos already on the
+// table keep whatever size they landed at.
 export function getPhotoSize(aspect) {
-    const width = aspect >= 1 ? BASE_SIZE : BASE_SIZE * aspect;
-    const height = aspect >= 1 ? BASE_SIZE / aspect : BASE_SIZE;
+    const scale = getSizeScale();
+    const width = (aspect >= 1 ? BASE_SIZE : BASE_SIZE * aspect) * scale;
+    const height = (aspect >= 1 ? BASE_SIZE / aspect : BASE_SIZE) * scale;
     return { width, height };
 }
 
-// A single photo on the table: a subdivided plane, bowed slightly via a
-// vertex-shader displacement injected into a MeshPhysicalMaterial (clearcoat
-// gives the glossy print finish for free - no hand-written lighting shader
-// needed), animated through a drop -> bounce -> rest state machine.
+// A single flat photo on the table: a plain plane with a glossy
+// MeshPhysicalMaterial (clearcoat gives the print-like highlight for free -
+// no hand-written lighting shader needed), animated through a drop -> slide
+// -> rest state machine. Photos used to bow slightly, but a lower photo's
+// curve could poke through a less-curved one stacked above it - especially
+// once several photos land at the same clamped stack height (see
+// slideshowScene.js) and also overlap each other, with nothing left to keep
+// one curve fully above another. Flat photos can't have that problem, and
+// losing the curve isn't a big loss visually.
+//
+// Which overlapping photo appears "on top" is resolved by draw order
+// (renderOrder + depth test/write disabled below), not by height - every
+// photo rests at the same fixed height (see PHOTO_HEIGHT in
+// slideshowScene.js). Height-based stacking was tried first, but two
+// photos both resting at the same (safety-capped) height that also
+// overlapped each other had nothing left to separate them and their
+// overlap flickered - an inherent risk of resolving overlap via the
+// depth buffer at all. Draw order has no such failure mode: renderOrder
+// fully decides paint order, so two coplanar photos never compete for the
+// same depth-buffer value in the first place.
 export class Photo {
-    constructor({ texture, aspect, x, z, landingY, rotationY, bowAmplitude, bowAxisMix }) {
+    constructor({ texture, aspect, x, z, landingY, rotationY, renderOrder }) {
         this.finalX = x;
         this.finalZ = z;
         this.landingY = landingY;
         this.finalRotationY = rotationY;
-        this.bowAmplitude = bowAmplitude;
-        this.bowAxisMix = bowAxisMix;
 
         const { width, height } = getPhotoSize(aspect);
-        this.halfWidth = width / 2;
-        this.halfHeight = height / 2;
 
         // Built lying flat (normal +Y) by baking the rotation into the
         // geometry itself, so the mesh's own .rotation stays single-axis
         // (yaw only) with no Euler-order surprises.
-        const geometry = new THREE.PlaneGeometry(width, height, GEOMETRY_SEGMENTS, GEOMETRY_SEGMENTS);
+        const geometry = new THREE.PlaneGeometry(width, height);
         geometry.rotateX(-Math.PI / 2);
 
         // FrontSide (the default) - the photo only ever yaws around its
         // vertical axis while lying flat, so its back is never actually
-        // visible. DoubleSide was a leftover from an earlier tumble design;
-        // keeping it risked the bow displacement flipping a few triangles'
-        // winding at grazing angles and rendering a mirrored back-face patch,
-        // which showed up as misaligned borders where photos overlapped.
+        // visible. depthTest/depthWrite are off because layering between
+        // photos is handled entirely by renderOrder (see class comment).
         const material = new THREE.MeshPhysicalMaterial({
             map: texture,
             roughness: 0.35,
             metalness: 0,
             clearcoat: 1.0,
-            clearcoatRoughness: 0.15
+            clearcoatRoughness: 0.15,
+            depthTest: false,
+            depthWrite: false
         });
-
-        // MeshPhysicalMaterial's default program cache key only reflects
-        // flags like "has a map" / "has clearcoat", so every Photo would
-        // otherwise collide onto one shared compiled program - and with a
-        // shared program, onBeforeCompile (and the per-material map/uniform
-        // setup it does) only actually runs for the first material that
-        // triggers the compile, leaving every other Photo's own texture
-        // unbound (rendered as flat grey) or its bow uniforms stale. Giving
-        // each Photo its own cache key forces its own compile, at the cost
-        // of one small, cheap shader compile per drop - never a concern at
-        // this scale (well under a hundred concurrent photos).
-        const materialId = nextMaterialId++;
-        material.customProgramCacheKey = () => `photo-${materialId}`;
-
-        material.onBeforeCompile = (shader) => {
-            shader.uniforms.uBowAmplitude = { value: this.bowAmplitude };
-            shader.uniforms.uAxisMix = { value: this.bowAxisMix };
-            // onBeforeCompile only adds these to the JS-side uniforms object -
-            // the GLSL source still needs its own `uniform` declarations, so
-            // they're prepended here rather than relying on any built-in chunk.
-            shader.vertexShader = 'uniform float uBowAmplitude;\nuniform float uAxisMix;\n' + shader.vertexShader
-                .replace('#include <begin_vertex>', `
-                    #include <begin_vertex>
-                    float bowCoord = mix(uv.x, uv.y, uAxisMix) * 2.0 - 1.0;
-                    transformed.y += uBowAmplitude * (1.0 - bowCoord * bowCoord);
-                `)
-                .replace('#include <beginnormal_vertex>', `
-                    #include <beginnormal_vertex>
-                    float bowCoordN = mix(uv.x, uv.y, uAxisMix) * 2.0 - 1.0;
-                    float bowSlope = -2.0 * uBowAmplitude * bowCoordN;
-                    objectNormal = normalize(objectNormal + vec3(mix(bowSlope, 0.0, uAxisMix), 0.0, mix(0.0, bowSlope, uAxisMix)));
-                `);
-        };
-
-        // Shadow maps are rendered with an auto-generated MeshDepthMaterial
-        // that knows nothing about the bow displacement above - without a
-        // matching custom depth material, the recorded shadow depth doesn't
-        // match the actual bowed surface, and the photo self-shadows into a
-        // solid black band. Re-applying the same position displacement here
-        // (normal isn't needed for a depth pass) keeps the two in sync.
-        const depthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
-        depthMaterial.onBeforeCompile = (shader) => {
-            shader.uniforms.uBowAmplitude = { value: this.bowAmplitude };
-            shader.uniforms.uAxisMix = { value: this.bowAxisMix };
-            shader.vertexShader = 'uniform float uBowAmplitude;\nuniform float uAxisMix;\n' + shader.vertexShader
-                .replace('#include <begin_vertex>', `
-                    #include <begin_vertex>
-                    float bowCoord = mix(uv.x, uv.y, uAxisMix) * 2.0 - 1.0;
-                    transformed.y += uBowAmplitude * (1.0 - bowCoord * bowCoord);
-                `);
-        };
-        depthMaterial.customProgramCacheKey = () => `photo-depth-${materialId}`;
 
         this.geometry = geometry;
         this.material = material;
-        this.depthMaterial = depthMaterial;
         this.texture = texture;
         this.mesh = new THREE.Mesh(geometry, material);
-        this.mesh.customDepthMaterial = depthMaterial;
+        this.mesh.renderOrder = renderOrder;
         this.mesh.castShadow = true;
         this.mesh.receiveShadow = true;
 
@@ -189,6 +162,5 @@ export class Photo {
         this.geometry.dispose();
         this.texture.dispose();
         this.material.dispose();
-        this.depthMaterial.dispose();
     }
 }

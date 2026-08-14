@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Photo, getPhotoSize, SKID_OFFSET } from './photo.js';
+import { Photo } from './photo.js';
 
 const PAN_SPEED = 1.2; // world units/sec the camera travels along -Z
 // Exported so slideshow.js's scripted test scenarios can place photos the
@@ -7,51 +7,23 @@ const PAN_SPEED = 1.2; // world units/sec the camera travels along -Z
 export const LOOKAHEAD_DISTANCE = 18;
 const BEHIND_MARGIN = 6; // how far past the camera a resting photo must be before it's culled
 const MAX_TABLE_PHOTOS = 40; // safety clamp only - normal pan/cadence keeps well under this
-const LANDING_HALF_WIDTH = 7; // lateral (x) range photos can land within
+const LANDING_HALF_WIDTH = 12; // lateral (x) range photos can land within
 const TABLE_SURFACE_Y = 0;
-// A new photo only needs to be raised above the table if it actually lands
-// on top of something already there - raising every drop regardless (e.g. by
-// a counter that only ever increases) makes the whole table drift upward
-// over time and leaves most photos floating above the surface instead of
-// resting on it. The step above whatever it's stacked on must still clear
-// the bow's max displacement (+/-0.10 units) on both photos, or the two
-// bowed surfaces cross through each other and Z-fight (visible as dark bands
-// across the photos).
-const STACK_HEIGHT_STEP = 0.3;
-// A small margin added to each photo's half-extents before testing for
-// overlap - covers the border's own width plus the skid's approach, so two
-// photos whose bodies just clear each other but whose borders would still
-// touch (or whose skid carries one slightly further than its nominal landing
-// spot) are still stacked instead of left at the same height to Z-fight.
-const OVERLAP_MARGIN = 0.2;
+// Every photo rests at this same fixed height, just enough above the table
+// to avoid Z-fighting against it - which photo appears "on top" where two
+// overlap is resolved entirely by draw order (see PHOTO_HEIGHT's use in
+// dropPhoto/Photo below), not by height. Height-based stacking (raising each
+// new overlapping drop a little further above whatever it landed on) was
+// tried first, but once several photos in a crowded area got clamped to the
+// same safety-cap height and also overlapped each other, there was nothing
+// left to separate them and their overlap flickered. Draw order has no such
+// failure mode - two coplanar photos never compete for the same depth-buffer
+// value in the first place.
+const PHOTO_HEIGHT = TABLE_SURFACE_Y + 0.02;
 const MAX_FRAME_DELTA = 0.1; // clamp so a backgrounded tab can't resume with one huge jump
-const TABLE_WIDTH = 24;
+const TABLE_WIDTH = 32; // wider than LANDING_HALF_WIDTH*2 so most drops land on it, not past its edge
 const TABLE_LENGTH = 80;
 const PLANK_WORLD_SIZE = 4; // world units covered by one tile of the wood texture
-
-// Separating Axis Theorem test for two rotated rectangles in the XZ plane -
-// exact regardless of rotation, unlike a plain centre-to-centre distance
-// check (which either misses corner-to-corner overlaps between two large
-// rotated photos, or over-triggers for photos that are actually clear).
-function rectanglesOverlap(x1, z1, rot1, halfW1, halfH1, x2, z2, rot2, halfW2, halfH2) {
-    const u1 = [Math.cos(rot1), Math.sin(rot1)];
-    const v1 = [-Math.sin(rot1), Math.cos(rot1)];
-    const u2 = [Math.cos(rot2), Math.sin(rot2)];
-    const v2 = [-Math.sin(rot2), Math.cos(rot2)];
-
-    const tx = x2 - x1;
-    const tz = z2 - z1;
-
-    for (const axis of [u1, v1, u2, v2]) {
-        const t = Math.abs(tx * axis[0] + tz * axis[1]);
-        const r1 = halfW1 * Math.abs(u1[0] * axis[0] + u1[1] * axis[1])
-            + halfH1 * Math.abs(v1[0] * axis[0] + v1[1] * axis[1]);
-        const r2 = halfW2 * Math.abs(u2[0] * axis[0] + u2[1] * axis[1])
-            + halfH2 * Math.abs(v2[0] * axis[0] + v2[1] * axis[1]);
-        if (t > r1 + r2) return false; // a separating axis exists - no overlap
-    }
-    return true;
-}
 
 // Owns the three.js scene: a camera that continuously pans forward along an
 // effectively infinite table (the table + light rig are repositioned every
@@ -63,6 +35,11 @@ export class SlideshowScene {
     constructor(canvas) {
         this.photos = [];
         this.clock = new THREE.Clock();
+        // Every drop gets the next value, so a newer photo always draws over
+        // an older one it overlaps - a plain sort key, not a world-space
+        // quantity, so it's safe to let this climb forever for the life of
+        // the session (unlike the height-based approach it replaced).
+        this.nextRenderOrder = 1; // 0 is the table's default, so photos start above it
 
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color(0x141414);
@@ -174,8 +151,8 @@ export class SlideshowScene {
         directionalLight.shadow.mapSize.set(1024, 1024);
         directionalLight.shadow.bias = -0.0015;
         directionalLight.shadow.normalBias = 0.02;
-        directionalLight.shadow.camera.left = -16;
-        directionalLight.shadow.camera.right = 16;
+        directionalLight.shadow.camera.left = -20;
+        directionalLight.shadow.camera.right = 20;
         directionalLight.shadow.camera.top = 24;
         directionalLight.shadow.camera.bottom = -24;
         directionalLight.shadow.camera.near = 1;
@@ -193,39 +170,12 @@ export class SlideshowScene {
         const x = fixedX ?? (Math.random() * 2 - 1) * LANDING_HALF_WIDTH;
         const z = fixedZ ?? this.camera.position.z - LOOKAHEAD_DISTANCE;
         const rotationY = fixedRotationY ?? Math.random() * Math.PI * 2;
-        // Always positive: the bow's edges sit exactly at landingY and the
-        // curve only ever bulges upward from there (never below) - a
-        // negative amplitude would dip the photo's centre below landingY,
-        // sinking it into the table (or whatever it's resting on).
-        const bowAmplitude = 0.04 + Math.random() * 0.06;
-        const bowAxisMix = Math.random();
 
-        const { width, height } = getPhotoSize(aspect);
-        // The skid can carry the photo up to SKID_OFFSET/2 further from its
-        // nominal landing spot in either X or Z, so pad this photo's own
-        // half-extents to cover the full area its body might actually pass
-        // through, not just where it ends up at rest.
-        const halfWidth = width / 2 + SKID_OFFSET / 2 + OVERLAP_MARGIN;
-        const halfHeight = height / 2 + SKID_OFFSET / 2 + OVERLAP_MARGIN;
-
-        // Flush with the table by default; only raised above it for photos
-        // it actually overlaps - a real oriented-rectangle test (not just
-        // centre-to-centre distance), since two large photos can overlap at
-        // their corners well past any single "too close" radius once
-        // rotation is taken into account. Not tied to a global,
-        // ever-increasing counter.
-        let landingY = TABLE_SURFACE_Y;
-        for (const other of this.photos) {
-            if (rectanglesOverlap(
-                x, z, rotationY, halfWidth, halfHeight,
-                other.finalX, other.finalZ, other.finalRotationY,
-                other.halfWidth + OVERLAP_MARGIN, other.halfHeight + OVERLAP_MARGIN
-            )) {
-                landingY = Math.max(landingY, other.landingY + STACK_HEIGHT_STEP);
-            }
-        }
-
-        const photo = new Photo({ texture, aspect, x, z, landingY, rotationY, bowAmplitude, bowAxisMix });
+        const photo = new Photo({
+            texture, aspect, x, z, rotationY,
+            landingY: PHOTO_HEIGHT,
+            renderOrder: this.nextRenderOrder++
+        });
         this.scene.add(photo.mesh);
         this.photos.push(photo);
     }
