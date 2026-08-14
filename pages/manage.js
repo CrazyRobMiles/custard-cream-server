@@ -33,6 +33,10 @@ router.get('/', (req, res) => {
     res.render('manage.ejs');
 });
 
+router.get('/upload', (req, res) => {
+    res.render('uploadPicture.ejs');
+});
+
 function escapeRegex(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
