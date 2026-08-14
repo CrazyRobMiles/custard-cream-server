@@ -27,6 +27,8 @@
     let currentTag = '';
     let totalPages = 1;
     let currentPhrase = null;
+    let aiEditMaxAttempts = 1;
+    let aiEditRetryDelayMs = 0;
 
     // If the session cookie has expired between page loads, the API routes'
     // authenticateToken middleware redirects to the (HTML) login page rather
@@ -44,6 +46,19 @@
         }
 
         return response;
+    }
+
+    function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function loadConfig() {
+        const response = await fetchJson('/manage/api/config');
+        if (!response) return;
+
+        const data = await response.json();
+        aiEditMaxAttempts = data.aiEditMaxAttempts;
+        aiEditRetryDelayMs = data.aiEditRetryDelayMs;
     }
 
     async function loadTags() {
@@ -175,6 +190,13 @@
         loadPage(currentPage);
     }
 
+    // Deliberately doesn't go through fetchJson(): a slow AI edit is prone to
+    // gateway timeouts and dropped connections, which look identical to an
+    // expired session (non-JSON/no response) but aren't - bouncing the user
+    // back to /login (and from there to the site's home page) on every
+    // transient failure was the bug this retry loop replaces. A real expired
+    // session is still detected via response.redirected and sent to /login;
+    // everything else is retried in place, up to aiEditMaxAttempts.
     async function aiEditCurrentPicture() {
         if (!currentPhrase) return;
 
@@ -184,29 +206,58 @@
             return;
         }
 
+        const phrase = currentPhrase;
         aiEditBtn.disabled = true;
-        // Nano Banana can take several seconds to return an edited image.
-        aiEditStatus.textContent = 'Sending to AI Edit - this can take a little while...';
 
         try {
-            const response = await fetchJson(`/manage/api/pictures/${encodeURIComponent(currentPhrase)}/ai-edit`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt })
-            });
-            if (!response) return;
+            for (let attempt = 1; attempt <= aiEditMaxAttempts; attempt++) {
+                // Nano Banana can take several seconds to return an edited image.
+                aiEditStatus.textContent = attempt === 1
+                    ? 'Sending to AI Edit - this can take a little while...'
+                    : `AI edit failed. Retrying (attempt ${attempt} of ${aiEditMaxAttempts})...`;
 
-            const data = await response.json();
+                let response = null;
+                try {
+                    response = await fetch(`/manage/api/pictures/${encodeURIComponent(phrase)}/ai-edit`, {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ prompt })
+                    });
+                } catch (err) {
+                    // Network failure (dropped connection, gateway timeout, etc.) -
+                    // fall through to the retry/failure handling below.
+                }
 
-            if (!response.ok) {
-                aiEditStatus.textContent = data.error || 'AI edit failed.';
-                return;
+                if (response && response.redirected) {
+                    window.location.href = `/login?next=${encodeURIComponent('/manage')}`;
+                    return;
+                }
+
+                const contentType = response ? (response.headers.get('content-type') || '') : '';
+                const data = response && contentType.includes('application/json')
+                    ? await response.json()
+                    : null;
+
+                if (response && response.ok && data) {
+                    loadTags();
+                    loadPage(1);
+                    await openViewer(data.phrase);
+                    viewerStatus.textContent = 'AI edit created a new picture, shown here.';
+                    return;
+                }
+
+                const errorMessage = (data && data.error) || 'AI edit failed.';
+
+                if (attempt >= aiEditMaxAttempts) {
+                    aiEditStatus.textContent = errorMessage;
+                    return;
+                }
+
+                if (aiEditRetryDelayMs > 0) {
+                    await sleep(aiEditRetryDelayMs);
+                }
             }
-
-            loadTags();
-            loadPage(1);
-            await openViewer(data.phrase);
-            viewerStatus.textContent = 'AI edit created a new picture, shown here.';
         } finally {
             aiEditBtn.disabled = false;
         }
@@ -256,6 +307,7 @@
         }
     });
 
+    loadConfig();
     loadTags();
     loadPage(1);
 })();

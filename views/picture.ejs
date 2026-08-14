@@ -18,7 +18,12 @@
 
         <img src="/pictures/<%= picture.filename %>" alt="<%= picture.phrase %>" class="img-fluid mb-4">
 
-        <p class="mt-4"><a href="/random">See a random picture</a></p>
+        <p class="mb-4">
+            <% if (picture.tags) { %>
+                <a href="/slideshow/view?tags=<%= encodeURIComponent(picture.tags) %>" class="btn btn-outline-primary">Slide Show</a>
+            <% } %>
+            <a href="/random" class="btn btn-outline-secondary">Random picture</a>
+        </p>
 
         <div class="d-flex justify-content-end mt-4">
             <img src="/assets/images/small-logo.png" alt="Custard Cream Server" style="max-width: 160px; height: auto;">

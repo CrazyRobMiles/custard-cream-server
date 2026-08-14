@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-const BASE_SIZE = 4.0; // world units, longest edge
+const BASE_SIZE = 8.0; // world units, longest edge
 const GEOMETRY_SEGMENTS = 16;
 const FALL_DURATION = 1.0;
 const SETTLE_DURATION = 0.5;

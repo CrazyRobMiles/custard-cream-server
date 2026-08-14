@@ -43,6 +43,15 @@ router.get('/api/tags', (req, res) => {
     res.json({ tags: TagCache.getTags() });
 });
 
+// Lets the AI Edit button retry in place (same attempt/delay counts as the
+// server would use) instead of hardcoding them client-side.
+router.get('/api/config', (req, res) => {
+    res.json({
+        aiEditMaxAttempts: Math.max(1, parseInt(process.env.AI_EDIT_MAX_ATTEMPTS, 10) || 3),
+        aiEditRetryDelayMs: Math.max(0, parseInt(process.env.AI_EDIT_RETRY_DELAY_MS, 10) || 2000)
+    });
+});
+
 router.get('/api/pictures', async (req, res) => {
     const tag = String(req.query.tag || '').trim();
     const requestedPage = Math.max(1, parseInt(req.query.page, 10) || 1);
