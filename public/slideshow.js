@@ -1,4 +1,5 @@
 import { SlideshowScene, LOOKAHEAD_DISTANCE } from './slideshowScene.js';
+import { FilmstripSlideshow } from './filmstripSlideshow.js';
 import { composePhotoTexture } from './photoCompositor.js';
 
 const QUEUE_LOW_WATERMARK = 4;
@@ -9,9 +10,19 @@ const DROP_INTERVAL_MAX_MS = 3000;
 const params = new URLSearchParams(window.location.search);
 const tags = params.get('tags') || '';
 const scenario = params.get('scenario') || '';
+const mode = params.get('mode') || 'top';
 
-const canvas = document.getElementById('slideshowCanvas');
-const scene = new SlideshowScene(canvas);
+const canvasEl = document.getElementById('slideshowCanvas');
+const filmstripCanvasEl = document.getElementById('filmstripCanvas');
+
+let scene;
+if (mode === 'horizontal') {
+    canvasEl.style.display = 'none';
+    scene = new FilmstripSlideshow(filmstripCanvasEl);
+} else {
+    filmstripCanvasEl.style.display = 'none';
+    scene = new SlideshowScene(canvasEl);
+}
 
 let photoQueue = [];
 let fetchingBatch = false;
@@ -37,6 +48,18 @@ async function topUpQueue() {
     }
 }
 
+// The table view shows photos at a modest on-screen size, so the server's
+// default thumbnail size suits it fine - but the horizontal filmstrip fills
+// the entire screen height with each photo, so it asks for a size matching
+// that (capped/clamped server-side regardless - see pages/pictures.js).
+function thumbUrl(phrase) {
+    const base = `/pictures/${encodeURIComponent(phrase)}/thumb`;
+    if (mode !== 'horizontal') return base;
+
+    const size = Math.round(window.innerHeight * Math.min(window.devicePixelRatio || 1, 2));
+    return `${base}?size=${size}`;
+}
+
 async function loadImage(url) {
     const image = new Image();
     image.src = url;
@@ -54,9 +77,12 @@ async function dropNext() {
     if (!picture) return; // idle - nothing to show yet, try again next cycle
 
     try {
-        const image = await loadImage(`/pictures/${encodeURIComponent(picture.phrase)}/thumb`);
-        const { texture, aspect } = composePhotoTexture(image);
-        scene.dropPhoto({ texture, aspect });
+        const image = await loadImage(thumbUrl(picture.phrase));
+        if (mode === 'horizontal') {
+            scene.dropPhoto({ image, aspect: image.naturalWidth / image.naturalHeight });
+        } else {
+            scene.dropPhoto(composePhotoTexture(image));
+        }
     } catch (err) {
         console.log('Skipping a drop:', err.message);
     }

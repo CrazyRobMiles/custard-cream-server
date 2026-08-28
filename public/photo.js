@@ -4,9 +4,21 @@ const BASE_SIZE = 8.0; // world units, longest edge
 const FALL_DURATION = 1.0;
 const SETTLE_DURATION = 0.5;
 const SPAWN_HEIGHT_ABOVE_LANDING = 8;
-const TUMBLE_AMPLITUDE = Math.PI * 0.6;
-const TUMBLE_FREQ = 10;
+const TUMBLE_AMPLITUDE = Math.PI * 0.6; // max initial angle a photo can be dropped in at, relative to where it lands
+const TUMBLE_FREQ = 10; // rad/s the drop-angle oscillates at while it decays
 const SKID_OFFSET = 0.6;
+
+// A photo dropped at an angle spins that angle down like a damped
+// oscillator: envelope(t) = dropAngle * e^(-ANGULAR_DAMPING * t), so its
+// angular velocity at release is ANGULAR_DAMPING * dropAngle (steeper drop
+// angle -> faster initial spin) and decays at that same fixed rate. Choosing
+// ANGULAR_DAMPING from FALL_DURATION - rather than picking it arbitrarily -
+// means whatever angle a photo happens to be dropped at, the envelope has
+// always decayed to ANGULAR_SETTLE_FRACTION of it (visually negligible) by
+// the time FALLING hands off to SETTLING, so every photo reads as settled
+// to its resting angle by then regardless of how far off it started.
+const ANGULAR_SETTLE_FRACTION = 0.02;
+const ANGULAR_DAMPING = -Math.log(ANGULAR_SETTLE_FRACTION) / FALL_DURATION;
 
 const STATE = { FALLING: 'falling', SETTLING: 'settling', RESTING: 'resting' };
 
@@ -101,10 +113,12 @@ export class Photo {
         // as "sliding across" whatever's already on the table.
         this.skidStartX = x + (Math.random() - 0.5) * SKID_OFFSET;
         this.skidStartZ = z + (Math.random() - 0.5) * SKID_OFFSET;
-        this.tumbleSeed = Math.random() * Math.PI * 2;
+        // The angle this photo is dropped in at, relative to finalRotationY -
+        // see ANGULAR_DAMPING above for how this decays back to 0.
+        this.dropAngle = (Math.random() - 0.5) * TUMBLE_AMPLITUDE;
 
         this.mesh.position.set(this.skidStartX, landingY + SPAWN_HEIGHT_ABOVE_LANDING, this.skidStartZ);
-        this.mesh.rotation.y = rotationY + (Math.random() - 0.5) * TUMBLE_AMPLITUDE;
+        this.mesh.rotation.y = rotationY + this.dropAngle;
     }
 
     get position() {
@@ -125,9 +139,8 @@ export class Photo {
             const eased = 1 - Math.pow(1 - t, 3);
             this.mesh.position.y = THREE.MathUtils.lerp(this.landingY + SPAWN_HEIGHT_ABOVE_LANDING, this.landingY, eased);
 
-            const tumbleDecay = 1 - eased;
-            this.mesh.rotation.y = this.finalRotationY
-                + Math.sin(this.elapsed * TUMBLE_FREQ + this.tumbleSeed) * (TUMBLE_AMPLITUDE * 0.5) * tumbleDecay;
+            const envelope = this.dropAngle * Math.exp(-ANGULAR_DAMPING * this.elapsed);
+            this.mesh.rotation.y = this.finalRotationY + envelope * Math.cos(this.elapsed * TUMBLE_FREQ);
 
             if (t >= 1) {
                 this.state = STATE.SETTLING;

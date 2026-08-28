@@ -60,36 +60,55 @@
     // everything needed (auth, role check, file validation, saving,
     // registering tags), and a "camera"-role session (required for every
     // /manage route, including this page) already satisfies its own role
-    // check.
+    // check. That endpoint only ever takes one file per request (that's all
+    // the camera ever sends), so multiple selected files are uploaded one
+    // request at a time rather than in a single multi-file request.
+    async function uploadOnePicture(file, tags) {
+        const formData = new FormData();
+        formData.append('image', file);
+        formData.append('tags', tags);
+
+        const response = await fetchJson('/pictures', { method: 'POST', body: formData });
+        if (!response) return null;
+
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || 'Upload failed.');
+        }
+
+        return data;
+    }
+
     async function uploadNewPicture() {
-        const file = uploadFile.files[0];
-        if (!file) {
-            uploadStatus.textContent = 'Choose an image first.';
+        const files = Array.from(uploadFile.files);
+        if (files.length === 0) {
+            uploadStatus.textContent = 'Choose one or more images first.';
             return;
         }
 
-        const formData = new FormData();
-        formData.append('image', file);
-        formData.append('tags', collectUploadTags());
+        const tags = collectUploadTags();
+        const phrases = [];
 
         uploadBtn.disabled = true;
-        uploadStatus.textContent = 'Uploading...';
 
         try {
-            const response = await fetchJson('/pictures', { method: 'POST', body: formData });
-            if (!response) return;
+            for (let i = 0; i < files.length; i++) {
+                uploadStatus.textContent = files.length === 1
+                    ? 'Uploading...'
+                    : `Uploading ${i + 1} of ${files.length}...`;
 
-            const data = await response.json();
-            if (!response.ok) {
-                uploadStatus.textContent = data.error || 'Upload failed.';
-                return;
+                const data = await uploadOnePicture(files[i], tags);
+                if (!data) return; // fetchJson already redirected to login
+                phrases.push(data.phrase);
             }
 
             // Cleared and left on this page (rather than redirecting back to
             // the gallery) so uploading several pictures in a row doesn't
             // mean re-navigating every time - the link below covers "I'm done".
             uploadStatus.innerHTML = '';
-            uploadStatus.append(`Uploaded as "${data.phrase}". `);
+            uploadStatus.append(phrases.length === 1
+                ? `Uploaded as "${phrases[0]}". `
+                : `Uploaded ${phrases.length} pictures: ${phrases.join(', ')}. `);
             const backLink = document.createElement('a');
             backLink.href = '/manage';
             backLink.textContent = 'Back to gallery';
@@ -98,6 +117,10 @@
             uploadFile.value = '';
             uploadNewTags.value = '';
             await loadTagOptions();
+        } catch (err) {
+            uploadStatus.textContent = phrases.length > 0
+                ? `${err.message} (${phrases.length} of ${files.length} uploaded before this failure.)`
+                : err.message;
         } finally {
             uploadBtn.disabled = false;
         }

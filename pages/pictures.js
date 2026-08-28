@@ -16,6 +16,13 @@ const Picture = require('../schemas/picture');
 const PICTURES_DIR = path.join(__dirname, '..', 'public', 'pictures');
 const SLIDESHOW_THUMB_MAX_DIMENSION = 480;
 const SLIDESHOW_THUMB_JPEG_QUALITY = 78;
+// The table view (slideshowScene.js) shows photos at a modest on-screen
+// size, so the default above suits it fine; the horizontal filmstrip view
+// (filmstripSlideshow.js) fills the entire screen height with each photo,
+// which the default was well below the resolution of - hence the ?size=
+// override below, clamped to this range rather than trusted from the client.
+const SLIDESHOW_THUMB_MIN_REQUESTABLE_DIMENSION = 480;
+const SLIDESHOW_THUMB_MAX_REQUESTABLE_DIMENSION = 1600;
 
 // Someone typing "Oak Larch Feather" (spaces, mixed case) should still find
 // oak-larch-feather - normalize before ever looking it up.
@@ -108,7 +115,9 @@ router.get('/:phrase', async (req, res) => {
 
 // Two path segments, so this can't collide with GET /:phrase regardless of
 // registration order. Used by the slideshow display, which needs images
-// sized for screen rather than full-resolution originals.
+// sized for screen rather than full-resolution originals. ?size= lets a
+// caller ask for something other than the default - see
+// SLIDESHOW_THUMB_MIN/MAX_REQUESTABLE_DIMENSION above.
 router.get('/:phrase/thumb', async (req, res) => {
     const picture = await Picture.findOne({ phrase: req.params.phrase });
 
@@ -117,15 +126,21 @@ router.get('/:phrase/thumb', async (req, res) => {
         return;
     }
 
+    const requestedSize = parseInt(req.query.size, 10);
+    const maxDimension = Number.isFinite(requestedSize)
+        ? Math.min(Math.max(requestedSize, SLIDESHOW_THUMB_MIN_REQUESTABLE_DIMENSION), SLIDESHOW_THUMB_MAX_REQUESTABLE_DIMENSION)
+        : SLIDESHOW_THUMB_MAX_DIMENSION;
+
     try {
         const thumbnail = await renderThumbnail(picture.filename, {
-            maxDimension: SLIDESHOW_THUMB_MAX_DIMENSION,
+            maxDimension,
             quality: SLIDESHOW_THUMB_JPEG_QUALITY
         });
 
         // A picture at a fixed phrase never changes its image bytes in place
         // (edits create a new phrase), so unlike /random/thumb this is safe
-        // to cache long-term.
+        // to cache long-term. Different ?size= values are different URLs, so
+        // each gets its own cache entry automatically.
         res.set('Cache-Control', 'public, max-age=86400, immutable');
         res.type('image/jpeg').send(thumbnail);
     }

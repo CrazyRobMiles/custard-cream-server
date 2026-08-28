@@ -8,6 +8,7 @@ export const LOOKAHEAD_DISTANCE = 18;
 const BEHIND_MARGIN = 6; // how far past the camera a resting photo must be before it's culled
 const MAX_TABLE_PHOTOS = 40; // safety clamp only - normal pan/cadence keeps well under this
 const LANDING_HALF_WIDTH = 12; // lateral (x) range photos can land within
+const LANDING_ROTATION_RANGE = Math.PI / 6; // 30 degrees, i.e. +/-15 degrees off horizontal
 const TABLE_SURFACE_Y = 0;
 // Every photo rests at this same fixed height, just enough above the table
 // to avoid Z-fighting against it - which photo appears "on top" where two
@@ -24,6 +25,16 @@ const MAX_FRAME_DELTA = 0.1; // clamp so a backgrounded tab can't resume with on
 const TABLE_WIDTH = 32; // wider than LANDING_HALF_WIDTH*2 so most drops land on it, not past its edge
 const TABLE_LENGTH = 80;
 const PLANK_WORLD_SIZE = 4; // world units covered by one tile of the wood texture
+
+// Camera pitches down at an angle (14 up, 9 back) - it's looking partly
+// *along* Z, which is also the axis it pans, so panning flies it forward
+// into the look direction ("coming towards you"). near/far kept tight
+// around the actual visible range (given the camera's height and pitch,
+// nothing of interest is ever closer than ~14 or farther than ~25 units)
+// rather than a generic 0.1-100 - depth-buffer precision is very sensitive
+// to that ratio, and a needlessly wide range was leaving overlapping
+// photos' borders prone to Z-fighting.
+const CAMERA = { x: 0, y: 14, z: 9, near: 6, far: 35, fov: 40 };
 
 // Owns the three.js scene: a camera that continuously pans forward along an
 // effectively infinite table (the table + light rig are repositioned every
@@ -44,14 +55,8 @@ export class SlideshowScene {
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color(0x141414);
 
-        // near/far kept tight around the actual visible range (given the
-        // camera's height and pitch, nothing of interest is ever closer than
-        // ~14 or farther than ~25 units) rather than a generic 0.1-100 -
-        // depth-buffer precision is very sensitive to that ratio, and a
-        // needlessly wide range was leaving overlapping photos' borders
-        // prone to Z-fighting.
-        this.camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 6, 35);
-        this.camera.position.set(0, 14, 9);
+        this.camera = new THREE.PerspectiveCamera(CAMERA.fov, window.innerWidth / window.innerHeight, CAMERA.near, CAMERA.far);
+        this.camera.position.set(CAMERA.x, CAMERA.y, CAMERA.z);
         this.camera.lookAt(0, 0, 0);
         // From here on the camera only ever translates along Z - never
         // rotated again - so this initial look angle is preserved forever
@@ -169,7 +174,10 @@ export class SlideshowScene {
 
         const x = fixedX ?? (Math.random() * 2 - 1) * LANDING_HALF_WIDTH;
         const z = fixedZ ?? this.camera.position.z - LOOKAHEAD_DISTANCE;
-        const rotationY = fixedRotationY ?? Math.random() * Math.PI * 2;
+        // Photos always come to rest within +/-15 degrees of horizontal
+        // (rotationY 0), like something dropped flat rather than spun in on
+        // landing - LANDING_ROTATION_RANGE below is that 30-degree spread.
+        const rotationY = fixedRotationY ?? (Math.random() - 0.5) * LANDING_ROTATION_RANGE;
 
         const photo = new Photo({
             texture, aspect, x, z, rotationY,

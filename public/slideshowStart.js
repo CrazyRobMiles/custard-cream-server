@@ -3,6 +3,7 @@
 
     const tagList = document.getElementById('tagList');
     const startBtn = document.getElementById('startBtn');
+    const mode = new URLSearchParams(window.location.search).get('mode');
 
     function escapeHtml(value) {
         return String(value)
@@ -36,8 +37,11 @@
 
     function startSlideshow() {
         const checked = Array.from(tagList.querySelectorAll('input[type=checkbox]:checked')).map(input => input.value);
-        const query = checked.length > 0 ? `?tags=${encodeURIComponent(checked.join(','))}` : '';
-        window.location.href = `/slideshow/view${query}`;
+        const target = new URLSearchParams();
+        if (checked.length > 0) target.set('tags', checked.join(','));
+        if (mode) target.set('mode', mode);
+        const query = target.toString();
+        window.location.href = `/slideshow/view${query ? '?' + query : ''}`;
     }
 
     startBtn.addEventListener('click', startSlideshow);

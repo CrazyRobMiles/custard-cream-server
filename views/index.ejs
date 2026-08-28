@@ -18,15 +18,21 @@
         <p>An image server for the custard cream camera.</p>
 
         <form action="/pictures/find" method="GET" class="mb-4">
-            <label for="phrase">Find a picture by its three words:</label>
-            <input type="text" id="phrase" name="phrase" placeholder="oak-larch-feather" required class="form-control">
-            <button type="submit" class="btn btn-primary mt-2">Find picture</button>
+            <label for="phrase" class="form-label">Find a picture by its three words:</label>
+            <div class="input-group">
+                <input type="text" id="phrase" name="phrase" placeholder="oak-larch-feather" required class="form-control">
+                <button type="submit" class="btn btn-primary">Find picture</button>
+            </div>
         </form>
 
-        <p><a href="/random">See a random picture</a></p>
-        <p><a href="/slideshow">Watch the slideshow</a></p>
+        <div class="d-grid gap-2 mb-4">
+            <a href="/random" class="btn btn-primary">See a random picture</a>
+            <a href="/slideshow" class="btn btn-primary">Watch the slideshow</a>
+            <a href="/slideshow?mode=horizontal" class="btn btn-primary">Watch the horizontal slideshow</a>
+        </div>
 
-        <p class="mt-4"><a href="https://www.robmiles.com" target="_blank" rel="noopener">www.robmiles.com</a></p>
+        <p class="mt-4"><a href="https://github.com/CrazyRobMiles/custard-cream-camera" target="_blank" rel="noopener">GitHub</a></p>
+        <p><a href="https://www.robmiles.com" target="_blank" rel="noopener">www.robmiles.com</a></p>
     </div>
 </body>
 
