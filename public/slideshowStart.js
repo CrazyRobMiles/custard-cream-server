@@ -3,7 +3,12 @@
 
     const tagList = document.getElementById('tagList');
     const startBtn = document.getElementById('startBtn');
+    const description = document.getElementById('description');
     const mode = new URLSearchParams(window.location.search).get('mode');
+
+    if (mode === 'horizontal') {
+        description.textContent = 'Pictures scrolling across the screen, one after another, chosen at random from everything uploaded.';
+    }
 
     function escapeHtml(value) {
         return String(value)
