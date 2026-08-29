@@ -8,6 +8,12 @@ export const LOOKAHEAD_DISTANCE = 18;
 const BEHIND_MARGIN = 6; // how far past the camera a resting photo must be before it's culled
 const MAX_TABLE_PHOTOS = 40; // safety clamp only - normal pan/cadence keeps well under this
 const LANDING_HALF_WIDTH = 12; // lateral (x) range photos can land within
+// On a landscape viewport the camera's horizontal FOV is much wider than on
+// portrait, so the same LANDING_HALF_WIDTH ends up looking scattered toward
+// the edges rather than sitting in the comfortable central area a viewer is
+// actually looking at - landscape gets a narrower spread instead, clustering
+// photos nearer screen-centre. Portrait is unaffected.
+const LANDING_HALF_WIDTH_LANDSCAPE = 7;
 const LANDING_ROTATION_RANGE = Math.PI / 6; // 30 degrees, i.e. +/-15 degrees off horizontal
 const TABLE_SURFACE_Y = 0;
 // Every photo rests at this same fixed height, just enough above the table
@@ -172,7 +178,9 @@ export class SlideshowScene {
     dropPhoto({ texture, aspect, x: fixedX, z: fixedZ, rotationY: fixedRotationY }) {
         if (this.photos.length >= MAX_TABLE_PHOTOS) return;
 
-        const x = fixedX ?? (Math.random() * 2 - 1) * LANDING_HALF_WIDTH;
+        const isLandscape = window.innerWidth >= window.innerHeight;
+        const landingHalfWidth = isLandscape ? LANDING_HALF_WIDTH_LANDSCAPE : LANDING_HALF_WIDTH;
+        const x = fixedX ?? (Math.random() * 2 - 1) * landingHalfWidth;
         const z = fixedZ ?? this.camera.position.z - LOOKAHEAD_DISTANCE;
         // Photos always come to rest within +/-15 degrees of horizontal
         // (rotationY 0), like something dropped flat rather than spun in on

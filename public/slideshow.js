@@ -4,13 +4,19 @@ import { composePhotoTexture } from './photoCompositor.js';
 
 const QUEUE_LOW_WATERMARK = 4;
 const BATCH_FETCH_COUNT = 10;
-const DROP_INTERVAL_MIN_MS = 2000;
-const DROP_INTERVAL_MAX_MS = 3000;
 
 const params = new URLSearchParams(window.location.search);
 const tags = params.get('tags') || '';
 const scenario = params.get('scenario') || '';
 const mode = params.get('mode') || 'top';
+
+// Only the table view needs a timed cadence - photos there land in a shared
+// area and need enough of a gap to avoid piling up on top of each other. The
+// horizontal filmstrip has no such gap to manage: photos are placed
+// edge-to-edge in a chain (see filmstripSlideshow.js's dropPhoto), so it's
+// dropped as fast as each image can load instead (see scheduleNextDrop).
+const DROP_INTERVAL_MIN_MS = 2500;
+const DROP_INTERVAL_MAX_MS = 3500;
 
 const canvasEl = document.getElementById('slideshowCanvas');
 const filmstripCanvasEl = document.getElementById('filmstripCanvas');
@@ -102,7 +108,9 @@ let dropTimer = null;
 function scheduleNextDrop() {
     if (document.hidden) return;
 
-    const delay = DROP_INTERVAL_MIN_MS + Math.random() * (DROP_INTERVAL_MAX_MS - DROP_INTERVAL_MIN_MS);
+    const delay = mode === 'horizontal'
+        ? 0
+        : DROP_INTERVAL_MIN_MS + Math.random() * (DROP_INTERVAL_MAX_MS - DROP_INTERVAL_MIN_MS);
     dropTimer = setTimeout(async () => {
         dropTimer = null;
         await dropNext();

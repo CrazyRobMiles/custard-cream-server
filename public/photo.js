@@ -29,12 +29,17 @@ const STATE = { FALLING: 'falling', SETTLING: 'settling', RESTING: 'resting' };
 // keeps photos occupying a comparable fraction of the visible width
 // regardless of orientation. REFERENCE_ASPECT is "desktop landscape", the
 // aspect BASE_SIZE was tuned against; MIN_SIZE_SCALE stops very narrow
-// phones shrinking photos down to illegibility.
+// phones shrinking photos down to illegibility. LANDSCAPE_SIZE_SCALE gives
+// landscape viewports a flat boost on top of that - the extra width a
+// landscape viewport has over a portrait one is exactly what makes bigger
+// photos read as comfortable there rather than crowded.
 const REFERENCE_ASPECT = 16 / 9;
 const MIN_SIZE_SCALE = 0.55;
+const LANDSCAPE_SIZE_SCALE = 1.3;
 
 function getSizeScale() {
     const viewportAspect = window.innerWidth / window.innerHeight;
+    if (viewportAspect >= 1) return LANDSCAPE_SIZE_SCALE;
     return Math.min(1, Math.max(MIN_SIZE_SCALE, viewportAspect / REFERENCE_ASPECT));
 }
 
