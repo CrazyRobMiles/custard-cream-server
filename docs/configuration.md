@@ -5,11 +5,71 @@
 - Node.js 20.x and npm 9+ (see `engines` in `package.json`).
 - A MongoDB database — this server is designed to share the same MongoDB Atlas cluster and `User` collection as [box-server](https://github.com/CrazyRobMiles/box-server) ("Connected Little Boxes"), so accounts are shared between the two sites. It will work against any MongoDB instance, but the `User` schema in `schemas/user.js` must match whatever already has accounts in it.
 
+### Installing Node.js on a Raspberry Pi
+
+Raspberry Pi OS's own `apt` repos lag well behind current Node releases — `sudo apt install nodejs` typically pulls something like Node 18 or older, which doesn't satisfy the `>=20 <21` requirement in `package.json`'s `engines`. Use [NodeSource's](https://github.com/nodesource/distributions) setup script instead, which adds a repo that tracks current releases and then installs from `apt` as normal:
+
+```
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+```
+
+This works on Raspberry Pi OS (32-bit or 64-bit, it detects the right architecture) as well as other Debian/Ubuntu-based systems. Confirm the installed version afterwards:
+
+```
+node -v   # should print v20.x
+npm -v    # should be 9 or higher
+```
+
+If a Pi already has an old `nodejs` package installed from `apt`, remove it first (`sudo apt-get remove nodejs`) before running the NodeSource script, to avoid the two conflicting.
+
 ## Install
 
 ```
 npm install
 ```
+
+## Database (Mongoose / MongoDB)
+
+The server uses [Mongoose](https://mongoosejs.com/) to talk to MongoDB. It's a normal `dependencies` entry in `package.json`, so `npm install` (above) installs it — there's nothing extra to set up beyond having a MongoDB database to point at.
+
+**Connection string**: put it in `DATABASE_URL` in `.env` (see the settings table below). `manager.js` reads it and calls `mongoose.connect(dbUrl, options)` on startup, before the server starts listening. A [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) connection string looks like:
+
+```
+mongodb+srv://dbUser:password@cluster0.example.mongodb.net/dbUser?retryWrites=true&w=majority
+```
+
+Use the **same** `DATABASE_URL` as box-server's `.env` if you want the two apps to share accounts and pictures data — see Prerequisites above.
+
+### Schemas
+
+Both models live under `schemas/` and are used as-is by `mongoose.model(...)` — no separate migration step, MongoDB creates collections on first write.
+
+**`schemas/user.js`** — collection `users` (Mongoose's default pluralization of `User`), shared with box-server:
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `name` | String | Yes | |
+| `password` | String | Yes | bcrypt hash, not plaintext. |
+| `role` | String | Yes | Not an enum in the schema — values actually used by this server are `"camera"` (the bootstrap camera account, see below) and `"admin"`. `behaviours/requireRole.js` checks this against a per-route allow-list. |
+| `email` | String | Yes | |
+| `lastLoginDate` | Date | Yes | Defaults to the time the document was constructed. |
+
+**`schemas/picture.js`** — collection `pictures` by default, or whatever `PICTURES_COLLECTION` is set to (see below):
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `phrase` | String | Yes, unique | The three-word address, e.g. `oak-larch-feather`. |
+| `filename` | String | Yes | Random GUID filename under `public/pictures/` — see "Where pictures are stored" below. |
+| `originalName` | String | Yes | Original filename as uploaded. |
+| `mimeType` | String | Yes | e.g. `image/jpeg`. |
+| `uploadedBy` | ObjectId | Yes | References a `User` document. |
+| `uploadedAt` | Date | Yes | Defaults to upload time. |
+| `tags` | String | No, defaults to `''` | Comma-separated, e.g. `emf2026,workshop`. |
+| `aiInstruction` | String | No, defaults to `''` | AI Edit prompt used to produce this image, if any. |
+| `originalPhrase` | String | No, defaults to `''` | Phrase of the source picture, if this one is an AI-edited derivative. |
+
+See "Uploading a picture" and "Managing pictures" below for how these fields are populated and edited.
 
 ## `.env` settings
 

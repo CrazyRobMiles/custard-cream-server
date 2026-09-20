@@ -4,12 +4,13 @@ An image server for the [custard cream camera](https://github.com/CrazyRobMiles/
 
 The server accepts picture uploads from an authenticated camera, gives each one a memorable three-word address (e.g. `oak-larch-feather`), and lets anyone with that link (or who types the words in) view the picture. Every picture is eligible to show up in the random-view gallery — consent for publishing happens at capture time, when the camera operator chooses to publish. No login is ever needed just to look at pictures; posting a picture always requires one. Picture files are stored on disk under random GUID names, unrelated to their three-word phrase, so the file only becomes discoverable via a database lookup — not by browsing the folder or guessing filenames.
 
-It's built with Node.js/Express/EJS/MongoDB, structured to sit alongside [box-server](https://github.com/CrazyRobMiles/box-server) ("Connected Little Boxes") and share its database and user accounts.
+It's built with Node.js/Express/EJS/MongoDB, structured to sit alongside [box-server](https://github.com/CrazyRobMiles/box-server) ("Connected Little Boxes") and share its database and user accounts. Data access is via [Mongoose](https://mongoosejs.com/), with `User` and `Picture` models defined in [schemas/](schemas/) — see [docs/configuration.md#database-mongoose--mongodb](docs/configuration.md#database-mongoose--mongodb) for install, connection string, and schema details.
 
 ## Documentation
 
 - **[docs/usage.md](docs/usage.md)** — how to browse pictures, scan/follow a QR code or three-word link, and see the random gallery.
-- **[docs/configuration.md](docs/configuration.md)** — installing dependencies, `.env` settings, the camera account, running the server, and where picture files are stored.
+- **[docs/configuration.md](docs/configuration.md)** — installing dependencies, `.env` settings, **the MongoDB/Mongoose database (connection string, schemas)**, the camera account, running the server, and where picture files are stored.
+- **[docs/cloudflared.md](docs/cloudflared.md)** — exposing a Pi-hosted server publicly at a real domain via Cloudflare Tunnel: getting a domain onto Cloudflare, DNS, and installing/running/maintaining `cloudflared` as a service.
 
 ## Project layout
 
