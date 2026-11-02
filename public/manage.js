@@ -11,6 +11,7 @@
     const viewerOverlay = document.getElementById('viewerOverlay');
     const viewerImage = document.getElementById('viewerImage');
     const viewerPhrase = document.getElementById('viewerPhrase');
+    const viewerUploadedAt = document.getElementById('viewerUploadedAt');
     const viewerTags = document.getElementById('viewerTags');
     const viewerAiInstruction = document.getElementById('viewerAiInstruction');
     const viewerOriginalPhrase = document.getElementById('viewerOriginalPhrase');
@@ -88,6 +89,11 @@
         nextPageBtn.disabled = currentPage >= totalPages;
     }
 
+    function formatUploadedAt(uploadedAt) {
+        if (!uploadedAt) return 'unknown';
+        return new Date(uploadedAt).toLocaleString();
+    }
+
     function renderGrid(pictures) {
         galleryGrid.innerHTML = '';
 
@@ -100,6 +106,7 @@
                     <div class="card-body">
                         <p class="card-text">${escapeHtml(picture.phrase)}</p>
                         <p class="card-text"><small class="text-muted">${escapeHtml(picture.tags)}</small></p>
+                        <p class="card-text"><small class="text-muted">Uploaded ${escapeHtml(formatUploadedAt(picture.uploadedAt))}</small></p>
                     </div>
                 </div>
             `;
@@ -118,6 +125,7 @@
         viewerImage.src = `/pictures/${encodeURIComponent(picture.filename)}`;
         viewerImage.alt = picture.phrase;
         viewerPhrase.textContent = picture.phrase;
+        viewerUploadedAt.textContent = formatUploadedAt(picture.uploadedAt);
         viewerTags.value = picture.tags;
         viewerAiInstruction.value = picture.aiInstruction;
         viewerOriginalPhrase.value = picture.originalPhrase;

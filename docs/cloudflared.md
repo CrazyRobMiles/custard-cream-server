@@ -93,7 +93,7 @@ sudo systemctl start cloudflared     # start now
 sudo systemctl status cloudflared    # check it's running
 ```
 
-The Node server itself should also be set up to survive reboots/crashes independently of the tunnel (e.g. via `pm2`, a systemd service of its own, or similar) — the tunnel only forwards traffic, it doesn't keep the app alive.
+The Node server itself should also be set up to survive reboots/crashes independently of the tunnel — the tunnel only forwards traffic, it doesn't keep the app alive. [runningOnPi.md](runningOnPi.md) covers setting it up as a systemd service of its own.
 
 ## 6. Maintaining the tunnel
 

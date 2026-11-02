@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Node.js 20.x and npm 9+ (see `engines` in `package.json`).
-- A MongoDB database — this server is designed to share the same MongoDB Atlas cluster and `User` collection as [box-server](https://github.com/CrazyRobMiles/box-server) ("Connected Little Boxes"), so accounts are shared between the two sites. It will work against any MongoDB instance, but the `User` schema in `schemas/user.js` must match whatever already has accounts in it.
+- A MongoDB database — this server is designed to share the same MongoDB Atlas cluster and `User` collection as [box-server](https://github.com/CrazyRobMiles/box-server) ("Connected Little Boxes"), so accounts are shared between the two sites (see [atlasMongoDb.md](atlasMongoDb.md#sharing-one-atlas-database-between-several-applications)). box-server isn't required — without it, the server works on a database of its own. It will work against any MongoDB instance, but the `User` schema in `schemas/user.js` must match whatever already has accounts in it.
 
 ### Installing Node.js on a Raspberry Pi
 
@@ -39,7 +39,7 @@ The server uses [Mongoose](https://mongoosejs.com/) to talk to MongoDB. It's a n
 mongodb+srv://dbUser:password@cluster0.example.mongodb.net/dbUser?retryWrites=true&w=majority
 ```
 
-Use the **same** `DATABASE_URL` as box-server's `.env` if you want the two apps to share accounts and pictures data — see Prerequisites above.
+Use the **same** `DATABASE_URL` as box-server's `.env` if you want the two apps to share user accounts — see Prerequisites above. Only the `users` collection is shared; each app keeps its other data in its own collections. [atlasMongoDb.md](atlasMongoDb.md#sharing-one-atlas-database-between-several-applications) explains the arrangement in full.
 
 ### Schemas
 

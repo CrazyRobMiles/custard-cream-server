@@ -20,7 +20,7 @@ function splitTags(tagsString) {
 }
 
 async function init() {
-    const pictures = await Picture.find({}, 'tags');
+    const pictures = await Picture.find({}, 'tags').lean();
     tagSet = new Set();
 
     for (const picture of pictures) {

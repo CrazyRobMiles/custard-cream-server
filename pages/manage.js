@@ -21,7 +21,8 @@ function pictureDetail(picture) {
         filename: picture.filename,
         tags: picture.tags,
         aiInstruction: picture.aiInstruction,
-        originalPhrase: picture.originalPhrase
+        originalPhrase: picture.originalPhrase,
+        uploadedAt: picture.uploadedAt
     };
 }
 
@@ -65,20 +66,39 @@ router.get('/api/pictures', async (req, res) => {
         filter.tags = { $regex: `(^|,)\\s*${escapeRegex(tag)}\\s*(,|$)` };
     }
 
-    const totalCount = await Picture.countDocuments(filter);
+    function findPage(pageNumber) {
+        return Picture.find(filter)
+            .sort({ uploadedAt: -1 })
+            .skip((pageNumber - 1) * PAGE_SIZE)
+            .limit(PAGE_SIZE)
+            .lean();
+    }
+
+    // countDocuments and find are independent - awaiting them one after the
+    // other pays the DB round-trip latency twice for no reason, which is the
+    // dominant cost against a remote cluster (the query work itself is
+    // trivial at this collection's size). Requesting both at once halves
+    // that latency. This optimistically fetches requestedPage before
+    // totalCount comes back to confirm it's actually in range; on the rare
+    // out-of-range request (e.g. a stale/hand-edited URL) that guess is
+    // discarded below and re-fetched at the correct, now-known page.
+    let [totalCount, pictures] = await Promise.all([
+        Picture.countDocuments(filter),
+        findPage(requestedPage)
+    ]);
     const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
     const page = Math.min(requestedPage, totalPages);
 
-    const pictures = await Picture.find(filter)
-        .sort({ uploadedAt: -1 })
-        .skip((page - 1) * PAGE_SIZE)
-        .limit(PAGE_SIZE);
+    if (page !== requestedPage) {
+        pictures = await findPage(page);
+    }
 
     res.json({
         pictures: pictures.map(picture => ({
             phrase: picture.phrase,
             filename: picture.filename,
-            tags: picture.tags
+            tags: picture.tags,
+            uploadedAt: picture.uploadedAt
         })),
         page,
         totalPages,
@@ -87,7 +107,7 @@ router.get('/api/pictures', async (req, res) => {
 });
 
 router.get('/api/pictures/:phrase', async (req, res) => {
-    const picture = await Picture.findOne({ phrase: req.params.phrase });
+    const picture = await Picture.findOne({ phrase: req.params.phrase }).lean();
 
     if (picture === null) {
         res.status(404).json({ error: 'Picture not found' });

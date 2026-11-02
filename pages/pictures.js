@@ -103,7 +103,7 @@ router.get('/find', (req, res) => {
 });
 
 router.get('/:phrase', async (req, res) => {
-    const picture = await Picture.findOne({ phrase: req.params.phrase });
+    const picture = await Picture.findOne({ phrase: req.params.phrase }).lean();
 
     if (picture === null) {
         res.status(404).render('pictureNotFound.ejs', { phrase: req.params.phrase });
@@ -119,7 +119,7 @@ router.get('/:phrase', async (req, res) => {
 // caller ask for something other than the default - see
 // SLIDESHOW_THUMB_MIN/MAX_REQUESTABLE_DIMENSION above.
 router.get('/:phrase/thumb', async (req, res) => {
-    const picture = await Picture.findOne({ phrase: req.params.phrase });
+    const picture = await Picture.findOne({ phrase: req.params.phrase }).lean();
 
     if (picture === null) {
         res.status(404).json({ error: 'Picture not found' });
